@@ -1,125 +1,145 @@
 <template>
-  <div class="app-wrapper">
-    <div class="sidebar no-print">
-      <h2>有給休暇申請</h2>
-      <div class="form-card">
-        <label>氏名</label>
-        <input v-model="newRequest.name" type="text">
-        
-        <label>休暇日</label>
-        <input v-model="newRequest.date" type="date">
-        
-        <label>理由</label>
-        <textarea v-model="newRequest.reason"></textarea>
-        
-        <button @click="submitRequest" class="submit-btn">申請を送信</button>
+  <div class="app-container">
+    <aside class="sidebar no-print">
+      <h2 class="title">有給申請</h2>
+      <div class="input-form">
+        <div class="field">
+          <label>氏名</label>
+          <input v-model="form.name" type="text" placeholder="氏名を入力">
+        </div>
+        <div class="field">
+          <label>日付</label>
+          <input v-model="form.date" type="date">
+        </div>
+        <div class="field">
+          <label>理由</label>
+          <textarea v-model="form.reason" rows="3" placeholder="私用のため等"></textarea>
+        </div>
+        <button @click="addLog" class="btn-primary">申請を登録</button>
       </div>
-    </div>
+    </aside>
 
-    <div class="main-content no-print">
-      <h2>申請履歴一覧</h2>
-      <div class="history-list">
-        <div v-for="item in history" :key="item.id" class="history-card">
-          <div class="card-info">
-            <strong>{{ item.date }}</strong> - {{ item.name }}
-            <p class="reason-text">{{ item.reason }}</p>
+    <main class="log-area no-print">
+      <h2 class="title">申請履歴・承認管理</h2>
+      <div class="log-grid">
+        <div v-for="log in logs" :key="log.id" class="log-card">
+          <div class="log-info">
+            <span class="log-date">{{ log.date }}</span>
+            <span class="log-name">{{ log.name }}</span>
+            <p class="log-reason">{{ log.reason }}</p>
           </div>
-          <div class="card-actions">
-            <span :class="['status-badge', item.status]">{{ item.status }}</span>
-            <button @click="printThis(item)" class="mini-btn">印刷用表示</button>
-            <button v-if="item.status === '承認待ち'" @click="approve(item)" class="approve-btn">承認する</button>
+          <div class="log-status">
+            <span :class="['badge', log.status]">{{ log.status }}</span>
+          </div>
+          <div class="log-btns">
+            <button v-if="log.status === '申請中'" @click="approve(log.id)" class="btn-approve">承認</button>
+            <button @click="openPrint(log)" class="btn-print">印刷用表示</button>
           </div>
         </div>
       </div>
-    </div>
+    </main>
 
-    <div v-if="printTarget" class="print-only">
-      <div class="print-sheet">
+    <div v-if="target" class="print-page">
+      <div class="a4-sheet">
         <h1>有給休暇申請書</h1>
-        <div class="print-content">
-          <p>氏名: {{ printTarget.name }}</p>
-          <p>日付: {{ printTarget.date }}</p>
-          <p>理由: {{ printTarget.reason }}</p>
-          <p>状態: {{ printTarget.status }}</p>
+        <div class="print-body">
+          <p>【申請者】 {{ target.name }}</p>
+          <p>【休暇日】 {{ target.date }}</p>
+          <p>【事由】 {{ target.reason }}</p>
+          <p>【状態】 {{ target.status }}</p>
         </div>
+        <div class="stamp-box">承認印</div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref } from 'vue'
 
-const history = ref([
-  { id: 1, name: 'しょうや', date: '2026-02-10', reason: '私用のため', status: '承認待ち' },
-  { id: 2, name: 'スタッフA', date: '2026-02-12', reason: '通院', status: '承認済み' }
-]);
+const logs = ref([
+  { id: 1, name: 'しょうや', date: '2026-02-04', reason: '役所手続き', status: '承認済み' },
+  { id: 2, name: '職員A', date: '2026-02-05', reason: '通院', status: '申請中' }
+])
 
-const newRequest = ref({ name: '', date: '', reason: '' });
-const printTarget = ref(null);
+const form = ref({ name: '', date: '', reason: '' })
+const target = ref(null)
 
-const submitRequest = () => {
-  if (!newRequest.value.name) return;
-  history.value.unshift({
-    id: Date.now(),
-    ...newRequest.value,
-    status: '承認待ち'
-  });
-  newRequest.value = { name: '', date: '', reason: '' };
-};
+const addLog = () => {
+  if (!form.value.name) return
+  logs.value.unshift({ id: Date.now(), ...form.value, status: '申請中' })
+  form.value = { name: '', date: '', reason: '' }
+}
 
-const approve = (item) => { item.status = '承認済み'; };
+const approve = (id) => {
+  const item = logs.value.find(l => l.id === id)
+  if (item) item.status = '承認済み'
+}
 
-const printThis = (item) => {
-  printTarget.value = item;
+const openPrint = (item) => {
+  target.value = item
   setTimeout(() => {
-    window.print();
-    printTarget.value = null;
-  }, 100);
-};
+    window.print()
+    target.value = null
+  }, 100)
+}
 </script>
 
 <style scoped>
-/* 全体の背景を白、文字を黒に固定して同化を防ぐ */
-.app-wrapper {
+/* 背景を「白」、文字を「濃いグレー」に強制固定 */
+.app-container {
   display: flex;
   min-height: 100vh;
-  background-color: #f0f2f5;
-  color: #333;
-  font-family: sans-serif;
+  background-color: #ffffff !important;
+  color: #333333 !important;
+  font-family: 'Helvetica', 'Arial', sans-serif;
 }
 
-.sidebar { width: 300px; padding: 20px; background: #fff; border-right: 1px solid #ddd; }
-.main-content { flex: 1; padding: 20px; overflow-y: auto; }
+.sidebar {
+  width: 320px;
+  background: #f8f9fa;
+  border-right: 1px solid #dee2e6;
+  padding: 25px;
+}
 
-.form-card { display: flex; flex-direction: column; gap: 10px; }
-input, textarea { padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+.log-area {
+  flex: 1;
+  padding: 25px;
+  background: #ffffff;
+}
 
-.submit-btn { padding: 12px; background: #ff4500; color: white; border: none; border-radius: 4px; cursor: pointer; }
+.title { border-bottom: 2px solid #ff4500; padding-bottom: 10px; margin-bottom: 20px; color: #333 !important; }
 
-.history-card {
-  background: white;
-  padding: 15px;
-  margin-bottom: 10px;
-  border-radius: 8px;
+.field { margin-bottom: 15px; }
+.field label { display: block; font-weight: bold; margin-bottom: 5px; }
+input, textarea { width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 4px; background: white !important; color: black !important; }
+
+.btn-primary { width: 100%; padding: 12px; background: #ff4500; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+
+.log-card {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  padding: 15px;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  background: white;
 }
 
-.status-badge { padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; }
-.status-badge.承認待ち { background: #fff3cd; color: #856404; }
-.status-badge.承認済み { background: #d4edda; color: #155724; }
+.badge { padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; }
+.badge.申請中 { background: #fff3cd; color: #856404; }
+.badge.承認済み { background: #d4edda; color: #155724; }
 
-.approve-btn { background: #28a745; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; margin-left: 10px; }
-.mini-btn { background: #eee; border: 1px solid #ccc; padding: 5px 10px; cursor: pointer; border-radius: 4px; }
+.btn-approve { background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 5px; }
+.btn-print { background: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
 
-/* 印刷用スタイル（背景を白、文字を黒に強制） */
+/* 印刷用 */
 @media print {
   .no-print { display: none !important; }
-  .print-only { display: block !important; background: white !important; color: black !important; width: 100%; height: 100%; }
-  .print-sheet { padding: 40px; border: 1px solid #000; background: white !important; color: black !important; }
+  .print-page { display: block !important; position: fixed; top: 0; left: 0; width: 100%; background: white !important; }
+  .a4-sheet { width: 100%; padding: 40px; color: black !important; }
+  .stamp-box { border: 2px solid red; color: red; width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; float: right; }
 }
-@media screen { .print-only { display: none; } }
+@media screen { .print-page { display: none; } }
 </style>
