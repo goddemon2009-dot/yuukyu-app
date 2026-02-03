@@ -1,56 +1,53 @@
 <template>
-  <div class="app-root">
-    <div v-if="!isLoggedIn" class="login-container">
+  <div class="app-container">
+    <div v-if="!isLoggedIn" class="login-overlay">
       <div class="login-card">
-        <h1 class="black-text">有給管理システム</h1>
-        <p class="sub-text">職員・管理者ログイン</p>
+        <h1 class="text-black">有給管理システム</h1>
         <div class="login-form">
           <input v-model="email" type="email" placeholder="メールアドレス">
           <input v-model="password" type="password" placeholder="パスワード">
-          <button @click="login" class="login-btn">ログイン</button>
+          <button @click="handleLogin" class="btn-login">ログイン</button>
         </div>
-        <p class="hint">※ admin を含むアドレスで「管理者」、それ以外で「職員」としてログイン（デモ）</p>
+        <p class="hint">※adminを含むアドレスで管理者としてログイン</p>
       </div>
     </div>
 
-    <div v-else class="dashboard">
-      <header class="header">
-        <span class="user-info">{{ userRole === 'admin' ? '【管理者】' : '【職員】' }} {{ email }}</span>
-        <button @click="logout" class="logout-link">ログアウト</button>
+    <div v-else class="dashboard-layout">
+      <header class="navbar">
+        <span class="status-text">ログイン中: {{ email }} ({{ userRole === 'admin' ? '管理者' : '職員' }})</span>
+        <button @click="handleLogout" class="btn-logout">ログアウト</button>
       </header>
 
-      <div class="main-layout">
+      <div class="main-body">
         <aside v-if="userRole === 'staff'" class="sidebar no-print">
-          <h2 class="black-text section-title">有給休暇を申請</h2>
-          <div class="input-card">
-            <div class="form-item">
-              <label>休暇日</label>
-              <input v-model="form.date" type="date">
-            </div>
-            <div class="form-item">
-              <label>理由</label>
-              <textarea v-model="form.reason" rows="4" placeholder="私用のため等"></textarea>
-            </div>
-            <button @click="addRequest" class="orange-btn">申請を送信</button>
+          <h2 class="text-black border-bottom">新規有給申請</h2>
+          <div class="form-group">
+            <label>休暇希望日</label>
+            <input v-model="form.date" type="date">
           </div>
+          <div class="form-group">
+            <label>理由</label>
+            <textarea v-model="form.reason" rows="4"></textarea>
+          </div>
+          <button @click="submitRequest" class="btn-submit">申請を送信する</button>
         </aside>
 
-        <main class="history-panel">
-          <h2 class="black-text section-title">{{ userRole === 'admin' ? '全職員の申請・承認管理' : 'あなたの申請履歴' }}</h2>
-          <div class="history-list">
-            <div v-for="item in filteredRequests" :key="item.id" class="card">
-              <div class="card-body">
-                <div class="req-header">
-                  <span class="req-user">{{ item.userName }}</span>
-                  <span class="req-date">{{ item.date }}</span>
-                </div>
-                <p class="req-reason">{{ item.reason }}</p>
+        <main class="content-panel">
+          <h2 class="text-black border-bottom">
+            {{ userRole === 'admin' ? '全職員の申請・承認管理' : 'あなたの申請履歴' }}
+          </h2>
+          <div class="card-list">
+            <div v-for="item in filteredRequests" :key="item.id" class="info-card">
+              <div class="card-header">
+                <span class="user-name">{{ item.userName }}</span>
+                <span class="request-date">{{ item.date }}</span>
               </div>
-              <div class="card-footer">
-                <span :class="['status-badge', item.status]">{{ item.status }}</span>
-                <div class="action-btns">
-                  <button v-if="userRole === 'admin' && item.status === '申請中'" @click="approve(item.id)" class="approve-btn">承認する</button>
-                  <button @click="printDoc(item)" class="print-btn">印刷用表示</button>
+              <p class="request-reason">{{ item.reason }}</p>
+              <div class="card-actions">
+                <span :class="['badge', item.status]">{{ item.status }}</span>
+                <div class="buttons">
+                  <button v-if="userRole === 'admin' && item.status === '申請中'" @click="approve(item.id)" class="btn-approve">承認</button>
+                  <button @click="startPrint(item)" class="btn-print">印刷</button>
                 </div>
               </div>
             </div>
@@ -59,14 +56,14 @@
       </div>
     </div>
 
-    <div v-if="printTarget" class="print-preview">
-      <div class="a4-page">
+    <div v-if="printData" class="print-area">
+      <div class="print-sheet">
         <h1>有給休暇申請書</h1>
-        <div class="doc-line">氏名: {{ printTarget.userName }}</div>
-        <div class="doc-line">日付: {{ printTarget.date }}</div>
-        <div class="doc-line">事由: {{ printTarget.reason }}</div>
-        <div class="doc-line">状態: {{ printTarget.status }}</div>
-        <div class="stamp">承認印</div>
+        <p>氏名: {{ printData.userName }}</p>
+        <p>日付: {{ printData.date }}</p>
+        <p>理由: {{ printData.reason }}</p>
+        <p>状態: {{ printData.status }}</p>
+        <div class="seal">承認印</div>
       </div>
     </div>
   </div>
@@ -75,49 +72,37 @@
 <script setup>
 import { ref, computed } from 'vue'
 
-// 状態管理
 const isLoggedIn = ref(false)
-const userRole = ref('staff') // 'admin' or 'staff'
+const userRole = ref('staff')
 const email = ref('')
 const password = ref('')
-const printTarget = ref(null)
+const printData = ref(null)
 
 const form = ref({ date: '', reason: '' })
-
-// 仮のデータ（本来はFirestoreから取得）
 const requests = ref([
-  { id: 1, userId: 'user1', userName: 'しょうや', date: '2026-02-04', reason: '役所の手続き', status: '承認済み' },
-  { id: 2, userId: 'user2', userName: '職員A', date: '2026-02-05', reason: '法事のため', status: '申請中' }
+  { id: 1, userName: 'しょうや', date: '2026-02-10', reason: '私用のため', status: '承認済み' },
+  { id: 2, userName: '職員A', date: '2026-02-12', reason: '通院', status: '申請中' }
 ])
 
-// ログイン処理（デモ用）
-const login = () => {
+const handleLogin = () => {
   if (!email.value) return
   isLoggedIn.value = true
   userRole.value = email.value.includes('admin') ? 'admin' : 'staff'
 }
 
-const logout = () => {
+const handleLogout = () => {
   isLoggedIn.value = false
   email.value = ''
-  password.value = ''
 }
 
-// 履歴のフィルタリング（職員なら自分のだけ、管理者なら全部）
 const filteredRequests = computed(() => {
   if (userRole.value === 'admin') return requests.value
-  return requests.value.filter(r => r.userName === 'しょうや') // 実際はログインIDで絞り込む
+  return requests.value.filter(r => r.userName === 'しょうや')
 })
 
-const addRequest = () => {
+const submitRequest = () => {
   if (!form.value.date) return
-  requests.value.unshift({
-    id: Date.now(),
-    userId: 'user1',
-    userName: 'しょうや',
-    ...form.value,
-    status: '申請中'
-  })
+  requests.value.unshift({ id: Date.now(), userName: 'しょうや', ...form.value, status: '申請中' })
   form.value = { date: '', reason: '' }
 }
 
@@ -126,69 +111,62 @@ const approve = (id) => {
   if (item) item.status = '承認済み'
 }
 
-const printDoc = (item) => {
-  printTarget.value = item
-  setTimeout(() => {
-    window.print()
-    printTarget.value = null
-  }, 100)
+const startPrint = (item) => {
+  printData.value = item
+  setTimeout(() => { window.print(); printData.value = null; }, 100)
 }
 </script>
 
 <style scoped>
-/* 全体の水色背景と文字色の固定 */
-.app-root {
+/* 背景を「しっかりとした水色」に強制 */
+.app-container {
   min-height: 100vh;
-  background-color: #e0f7ff !important; /* 水色 */
+  background-color: #b3e5fc !important; /* 明るい水色 */
   color: #000000 !important;
   font-family: sans-serif;
 }
 
-.black-text { color: #000000 !important; }
+.text-black { color: #000000 !important; }
+.border-bottom { border-bottom: 2px solid #ff5722; padding-bottom: 10px; margin-bottom: 20px; }
 
-/* ログイン画面 */
-.login-container { display: flex; justify-content: center; align-items: center; height: 100vh; }
-.login-card { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; width: 350px; }
-.login-form input { width: 100%; margin-bottom: 15px; padding: 12px; border: 1px solid #ccc; border-radius: 5px; }
-.login-btn { width: 100%; background: #007bff; color: white; padding: 12px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
-.hint { font-size: 0.7rem; color: #666; margin-top: 15px; }
+/* ログイン */
+.login-overlay { display: flex; justify-content: center; align-items: center; height: 100vh; }
+.login-card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.2); width: 360px; text-align: center; }
+.login-form input { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
+.btn-login { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
 
 /* ダッシュボード */
-.dashboard { display: flex; flex-direction: column; height: 100vh; }
-.header { background: #333; color: white; padding: 10px 20px; display: flex; justify-content: space-between; }
-.logout-link { background: none; border: 1px solid white; color: white; padding: 2px 10px; cursor: pointer; border-radius: 4px; }
+.dashboard-layout { display: flex; flex-direction: column; height: 100vh; }
+.navbar { background: #333; color: white; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; }
+.btn-logout { background: transparent; border: 1px solid white; color: white; padding: 5px 10px; cursor: pointer; border-radius: 4px; }
 
-.main-layout { display: flex; flex: 1; overflow: hidden; }
-.sidebar { width: 320px; background: #ffffffcc; padding: 20px; border-right: 1px solid #b3e5fc; }
-.history-panel { flex: 1; padding: 20px; overflow-y: auto; }
+.main-body { display: flex; flex: 1; overflow: hidden; }
+.sidebar { width: 300px; background: rgba(255, 255, 255, 0.8); padding: 20px; border-right: 1px solid #90caf9; }
+.content-panel { flex: 1; padding: 20px; overflow-y: auto; }
 
-.section-title { border-bottom: 2px solid #ff5722; padding-bottom: 8px; margin-bottom: 20px; }
-
-/* 入力・カードデザイン */
-.form-item { margin-bottom: 15px; }
+/* フォーム・カード */
+.form-group { margin-bottom: 15px; }
 label { display: block; font-weight: bold; margin-bottom: 5px; color: #000; }
-input, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; background: white !important; color: black !important; }
+input, textarea { width: 100%; padding: 10px; border: 1px solid #999; border-radius: 4px; background: white !important; color: black !important; }
+.btn-submit { width: 100%; padding: 12px; background: #ff5722; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
 
-.orange-btn { width: 100%; background: #ff5722; color: white; padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+.info-card { background: white; border-radius: 8px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+.card-header { display: flex; justify-content: space-between; font-weight: bold; color: #000; margin-bottom: 10px; }
+.request-reason { background: #f0f0f0; padding: 10px; border-radius: 4px; color: #333; margin-bottom: 10px; }
 
-.card { background: white; border-radius: 10px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); display: flex; flex-direction: column; }
-.req-header { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 10px; color: #000; }
-.req-reason { background: #f9f9f9; padding: 10px; border-radius: 4px; margin-bottom: 15px; }
+.card-actions { display: flex; justify-content: space-between; align-items: center; }
+.badge { padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 0.8rem; }
+.badge.申請中 { background: #fff3cd; color: #856404; }
+.badge.承認済み { background: #d4edda; color: #155724; }
 
-.card-footer { display: flex; justify-content: space-between; align-items: center; }
-.status-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; }
-.status-badge.申請中 { background: #fff3cd; color: #856404; }
-.status-badge.承認済み { background: #d4edda; color: #155724; }
+.btn-approve { background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 5px; }
+.btn-print { background: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
 
-.approve-btn { background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 5px; }
-.print-btn { background: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
-
-/* 印刷用 */
+/* 印刷 */
 @media print {
   .no-print { display: none !important; }
-  .app-root { background: white !important; }
-  .print-preview { display: block !important; }
-  .a4-page { padding: 50px; color: black !important; }
+  .app-container { background: white !important; }
+  .print-area { display: block !important; }
 }
-@media screen { .print-preview { display: none; } }
+@media screen { .print-area { display: none; } }
 </style>
